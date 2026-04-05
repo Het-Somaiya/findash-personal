@@ -1,0 +1,21 @@
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.env
+backend/db.sqlite3
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# OS
+.DS_Store
+
+node_modules/
