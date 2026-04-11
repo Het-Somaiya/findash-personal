@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Third-party
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     # Local
     'core',
@@ -62,16 +63,23 @@ TEMPLATES = [
 WSGI_APPLICATION = 'findash.wsgi.application'
 
 
-# Database — SQLite by default, PostgreSQL if USE_POSTGRES=True
-if os.getenv('USE_POSTGRES', 'False') == 'True':
+# Database — Azure SQL primary, SQLite fallback when credentials are absent
+_db_host = os.getenv('DB_HOST', '')
+_db_user = os.getenv('DB_USER', '')
+_db_password = os.getenv('DB_PASSWORD', '')
+
+if _db_host and _db_user and _db_password:
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME', 'findash'),
-            'USER': os.getenv('DB_USER', 'postgres'),
-            'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-            'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5433'),
+            'ENGINE': 'mssql',
+            'NAME': os.getenv('DB_NAME', 'findash-sql-db'),
+            'HOST': _db_host,
+            'PORT': os.getenv('DB_PORT', '1433'),
+            'USER': _db_user,
+            'PASSWORD': _db_password,
+            'OPTIONS': {
+                'driver': 'ODBC Driver 18 for SQL Server',
+            },
         }
     }
 else:
@@ -91,7 +99,32 @@ REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
     ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
 }
+
+# Simple JWT
+from datetime import timedelta  # noqa: E402
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'JTI_CLAIM': 'jti',
+}
+
+# Auth cookie (httpOnly refresh token)
+AUTH_COOKIE_NAME = 'findash_refresh'
+AUTH_COOKIE_SECURE = not DEBUG
+AUTH_COOKIE_HTTPONLY = True
+AUTH_COOKIE_SAMESITE = 'Lax'
+AUTH_COOKIE_PATH = '/api/auth/'
+AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -110,11 +143,16 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+AUTH_USER_MODEL = 'core.User'
+
+AUTHENTICATION_BACKENDS = ['core.auth_backend.EmailBackend']
+
 # CORS — allow the Vite dev server
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
+CORS_ALLOW_CREDENTIALS = True
 
 # Finnhub
 FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '')
@@ -124,3 +162,26 @@ AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY', '')
 AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT', '')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4o-mini')
 AZURE_OPENAI_API_VERSION = os.getenv('AZURE_OPENAI_API_VERSION', '2025-01-01-preview')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '[{levelname}] {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'core': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
